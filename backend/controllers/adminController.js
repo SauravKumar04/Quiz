@@ -1,11 +1,9 @@
 import Quiz from '../models/Quiz.js';
 import Attempt from '../models/Attempt.js';
 
-// Rock-solid normalizer that guarantees schema requirements
 const normalizeQuestions = (questions = []) =>
   questions.map((question, index) => {
     const type = question.type || 'fillBlank';
-    // Ensure timeLimit never goes below 1, preventing Schema Validation Error
     const timeLimit = Math.max(1, Number(question.timeLimit) || 120);
     const revealTime = type === 'passageRecall' ? Math.max(0, Number(question.revealTime) || 0) : 0;
 
@@ -39,11 +37,10 @@ export const createQuiz = async (req, res) => {
     const quiz = await Quiz.create(payload);
     return res.status(201).json(quiz);
   } catch (error) {
-    console.error("Create Quiz Error:", error);
     if (error.name === 'ValidationError') {
       return res.status(400).json({ error: Object.values(error.errors).map(e => e.message).join(', ') });
     }
-    return res.status(500).json({ error: 'Failed to create quiz. Check server logs.' });
+    return res.status(500).json({ error: 'Failed to create quiz.' });
   }
 };
 
@@ -52,7 +49,6 @@ export const getAllQuizzes = async (req, res) => {
     const quizzes = await Quiz.find().sort({ createdAt: -1 });
     return res.json(quizzes);
   } catch (error) {
-    console.error("Get Quizzes Error:", error);
     return res.status(500).json({ error: 'Failed to fetch quizzes.' });
   }
 };
@@ -66,18 +62,11 @@ export const updateQuiz = async (req, res) => {
       payload.totalTimeSeconds = calcTotalTime(payload.questions);
     }
 
-    const quiz = await Quiz.findByIdAndUpdate(req.params.id, payload, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!quiz) {
-      return res.status(404).json({ error: 'Quiz not found.' });
-    }
+    const quiz = await Quiz.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found.' });
 
     return res.json(quiz);
   } catch (error) {
-    console.error("Update Quiz Error:", error);
     if (error.name === 'ValidationError') {
       return res.status(400).json({ error: Object.values(error.errors).map(e => e.message).join(', ') });
     }
@@ -88,29 +77,23 @@ export const updateQuiz = async (req, res) => {
 export const deleteQuiz = async (req, res) => {
   try {
     const quiz = await Quiz.findByIdAndDelete(req.params.id);
-    if (!quiz) {
-      return res.status(404).json({ error: 'Quiz not found.' });
-    }
+    if (!quiz) return res.status(404).json({ error: 'Quiz not found.' });
     return res.json({ message: 'Quiz deleted successfully.' });
   } catch (error) {
-    console.error("Delete Quiz Error:", error);
     return res.status(500).json({ error: 'Failed to delete quiz.' });
   }
 };
 
+// UPDATED: Now populates "questions" so the UI can show the prompt
 export const getPendingReviews = async (req, res) => {
   try {
-    const attempts = await Attempt.find({
-      status: 'completed',
-      'answers.needsManualReview': true,
-    })
+    const attempts = await Attempt.find({ status: 'completed', 'answers.needsManualReview': true })
       .sort({ updatedAt: -1 })
       .populate('userId', 'name email')
-      .populate('quizId', 'title description');
+      .populate('quizId', 'title description questions'); // <-- Added questions here
 
     return res.json(attempts);
   } catch (error) {
-    console.error("Get Pending Reviews Error:", error);
     return res.status(500).json({ error: 'Failed to fetch reviews.' });
   }
 };
@@ -143,7 +126,6 @@ export const evaluateAnswer = async (req, res) => {
     await attempt.save();
     return res.json(attempt);
   } catch (error) {
-    console.error("Evaluate Answer Error:", error);
     return res.status(500).json({ error: 'Failed to evaluate answer.' });
   }
 };
